@@ -65,7 +65,7 @@ load_dotenv()  # load all our environment variables
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def get_gemini_response(input_text, prompt):
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     response = model.generate_content(prompt.format(text=input_text, jd=jd))
     try:
         return json.loads(response.text)
