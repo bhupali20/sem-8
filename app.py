@@ -1,3 +1,58 @@
+# import streamlit as st
+# import google.generativeai as genai
+# import os
+# import PyPDF2 as pdf
+# from dotenv import load_dotenv
+# import json
+
+# load_dotenv() ## load all our environment variables
+
+# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# def get_gemini_repsonse(input):
+#     model=genai.GenerativeModel('gemini-1.5-flash')
+#     response=model.generate_content(input)
+#     return response.text
+
+# def input_pdf_text(uploaded_file):
+#     reader=pdf.PdfReader(uploaded_file)
+#     text=""
+#     for page in range(len(reader.pages)):
+#         page=reader.pages[page]
+#         text+=str(page.extract_text())
+#     return text
+
+# #Prompt Template
+
+# input_prompt="""
+# Hey Act Like a skilled or very experience ATS(Application Tracking System)
+# with a deep understanding of tech field,software engineering,data science ,data analyst
+# and big data engineer. Your task is to evaluate the resume based on the given job description.
+# You must consider the job market is very competitive and you should provide 
+# best assistance for improving thr resumes. Assign the percentage Matching based 
+# on Jd and
+# the missing keywords with high accuracy
+# resume:{text}
+# description:{jd}
+
+# I want the response in one single string having the structure
+# {{"JD Match":"%","MissingKeywords:[]","Profile Summary":""}}
+# """
+
+# ## streamlit app
+# st.title("Smart ATS")
+# st.text("Improve Your Resume ATS")
+# jd=st.text_area("Paste the Job Description")
+# uploaded_file=st.file_uploader("Upload Your Resume",type="pdf",help="Please uplaod the pdf")
+
+# submit = st.button("Submit")
+
+# if submit:
+#     if uploaded_file is not None:
+#         text=input_pdf_text(uploaded_file)
+#         response=get_gemini_repsonse(input_prompt)
+#         st.subheader(response)
+
 import streamlit as st
 import google.generativeai as genai
 import os
@@ -5,55 +60,33 @@ import PyPDF2 as pdf
 from dotenv import load_dotenv
 import json
 
-# Load environment variables
-load_dotenv()
+load_dotenv()  # load all our environment variables
 
-# Configure Google Gemini API
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key:
-    st.error("❌ API Key is missing. Please check your .env file.")
-    st.stop()
-genai.configure(api_key=api_key)
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Function to get Gemini response
-def get_gemini_response(input_text, prompt, jd):
+def get_gemini_response(input_text, prompt):
     model = genai.GenerativeModel('gemini-1.5-flash')
-    formatted_prompt = prompt.format(text=input_text, jd=jd)
-    
+    response = model.generate_content(prompt.format(text=input_text, jd=jd))
     try:
-        response = model.generate_content(formatted_prompt)
-        return json.loads(response.text)  # Try parsing JSON response
-    except json.JSONDecodeError:
-        st.error("❌ Invalid JSON response from Gemini AI. Try again later.")
-        return None
-    except Exception as e:
-        st.error(f"❌ Error in generating response: {str(e)}")
-        return None
+        return json.loads(response.text)
+    except:
+        return response.text
 
-# Function to extract text from uploaded PDF
 def input_pdf_text(uploaded_file):
-    try:
-        reader = pdf.PdfReader(uploaded_file)
-        text = ""
-        for page in reader.pages:
-            extracted_text = page.extract_text()
-            if extracted_text:
-                text += extracted_text
-        if not text.strip():
-            st.error("❌ Could not extract text from the PDF. Try a different file.")
-            return None
-        return text
-    except Exception as e:
-        st.error(f"❌ Error processing PDF: {str(e)}")
-        return None
+    reader = pdf.PdfReader(uploaded_file)
+    text = ""
+    for page in reader.pages:
+        text += str(page.extract_text())
+    return text
 
 # Prompt Template
 input_prompt = """
-Hey Act Like a skilled or very experienced ATS (Application Tracking System)
-with a deep understanding of the tech field, software engineering, data science, 
-data analytics, and big data engineering. Your task is to evaluate the resume based on the given job description.
-You must consider the job market is very competitive and provide the best assistance for improving the resumes. 
-Assign a percentage match based on the JD and highlight the missing keywords with high accuracy.
+Hey Act Like a skilled or very experience ATS(Application Tracking System)
+with a deep understanding of tech field, software engineering, data science, data analyst
+and big data engineer. Your task is to evaluate the resume based on the given job description.
+You must consider the job market is very competitive and you should provide 
+best assistance for improving the resumes. Assign the percentage Matching based 
+on JD and the missing keywords with high accuracy.
 
 Resume: {text}
 Job Description: {jd}
@@ -111,7 +144,7 @@ with col1:
 
 with col2:
     st.markdown("### Upload Resume")
-    uploaded_file = st.file_uploader("Upload Your Resume (PDF)", type="pdf", help="Please upload a PDF file.")
+    uploaded_file = st.file_uploader("Upload Your Resume (PDF)", type="pdf", help="Please upload the pdf")
 
 submit = st.button("Analyze Resume")
 
@@ -119,12 +152,7 @@ if submit:
     if uploaded_file is not None and jd:
         with st.spinner("Analyzing your resume..."):
             text = input_pdf_text(uploaded_file)
-            if text is None:
-                st.stop()  # Stop execution if text extraction fails
-            
-            response = get_gemini_response(text, input_prompt, jd)
-            if response is None:
-                st.stop()  # Stop execution if API response is invalid
+            response = get_gemini_response(text, input_prompt)
             
             if isinstance(response, dict):
                 # Results section
@@ -138,7 +166,7 @@ if submit:
                 # Missing Keywords
                 st.markdown("### 🎯 Missing Keywords")
                 st.markdown("<div class='keywords-section'>", unsafe_allow_html=True)
-                for keyword in response.get('MissingKeywords', []):
+                for keyword in response['MissingKeywords']:
                     st.markdown(f"<span class='keyword-pill'>{keyword}</span>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 
@@ -151,12 +179,13 @@ if submit:
                 # Recommendations
                 st.markdown("### 💡 Next Steps")
                 st.info("""
-                1. Add the missing keywords to your resume where applicable.
-                2. Quantify your achievements with metrics.
-                3. Tailor your resume summary to better match the job description.
-                4. Use action verbs and industry-specific terminology.
+                1. Add the missing keywords to your resume where applicable
+                2. Quantify your achievements with metrics
+                3. Tailor your resume summary to better match the job description
+                4. Use action verbs and industry-specific terminology
                 """)
+                
             else:
-                st.error("❌ Failed to analyze the resume. Please try again.")
+                st.error("Failed to analyze the resume. Please try again.")
     else:
-        st.warning("⚠️ Please upload both a resume and job description before analyzing.")
+        st.warning("Please upload both a resume and job description before analyzing.")
