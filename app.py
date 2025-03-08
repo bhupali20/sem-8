@@ -1,149 +1,78 @@
-import streamlit as st
-import google.generativeai as genai
-import os
-import PyPDF2 as pdf
-from dotenv import load_dotenv
 import json
+import time
+import streamlit as st
+from google.generativeai import generate_content
 
-# Load environment variables
-load_dotenv()
-
-# Configure Gemini API
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-def get_gemini_response(resume_text, jd_text):
-    """Generate AI-based ATS analysis using Gemini API."""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+# Function to fetch gemini response
+def get_gemini_response(input_text, prompt):
+    formatted_prompt = prompt.format(text=input_text, jd=jd)
     
-    input_prompt = f"""
-    Hey, act like a highly experienced ATS (Application Tracking System) 
-    with deep expertise in tech roles like Software Engineering, Data Science, 
-    Data Analysis, and Big Data Engineering. Your task is to evaluate a given 
-    resume based on the provided job description.
-
-    Please ensure high accuracy in:
-    - **JD Match (%)**
-    - **Missing Keywords**
-    - **Profile Summary Suggestions**
-    
-    Resume:
-    ```
-    {resume_text}
-    ```
-    Job Description:
-    ```
-    {jd_text}
-    ```
-
-    Provide the response **ONLY** in this JSON format:
-    {{
-        "JD Match": "XX%",
-        "MissingKeywords": ["keyword1", "keyword2"],
-        "Profile Summary": "Your improved profile summary..."
-    }}
-    """
-
-    response = model.generate_content(input_prompt)
+    print(f"Formatted prompt: {formatted_prompt}")  # Debugging: log formatted prompt
 
     try:
-        return json.loads(response.text)  # Parse response as JSON
-    except json.JSONDecodeError:
-        return {"error": "Failed to parse AI response. Try again!"}  # Handle errors
+        model = genai.GenerativeModel("gemini-1.5-flash")  # Use a supported model
+        response = model.generate_content(formatted_prompt)
+        
+        print(f"API Response: {response.text}")  # Log the raw response
+        
+        # Try parsing the response as JSON
+        try:
+            return json.loads(response.text)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON: {str(e)}")
+            return response.text  # Return raw response if parsing fails
+    except Exception as e:
+        print(f"Error fetching API response: {str(e)}")
+        st.error(f"Failed to analyze the resume. Please try again. Error: {str(e)}")
+        return None
 
-def extract_text_from_pdf(uploaded_file):
-    """Extract text from uploaded PDF resume."""
-    reader = pdf.PdfReader(uploaded_file)
-    text = "\n".join([page.extract_text() or "" for page in reader.pages])  # Handle NoneType
-    return text.strip()
+# Wrapper function with retry logic
+def get_gemini_response_with_retry(input_text, prompt, retries=3):
+    attempt = 0
+    while attempt < retries:
+        try:
+            return get_gemini_response(input_text, prompt)
+        except Exception as e:
+            attempt += 1
+            print(f"Attempt {attempt} failed: {e}")
+            if attempt == retries:
+                st.error("Failed to analyze after multiple attempts.")
+            time.sleep(2)  # Wait for a couple of seconds before retrying
+            return None
 
-# Streamlit UI
-st.set_page_config(page_title="Smart ATS", layout="wide")
-
-# Custom Styling
-st.markdown("""
-    <style>
-    .main-title {
-        text-align: center;
-        color: #2c3e50;
-        padding: 20px;
-    }
-    .result-card {
-        padding: 20px;
-        border-radius: 10px;
-        margin: 10px 0;
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-    }
-    .match-percentage {
-        font-size: 24px;
-        font-weight: bold;
-        color: #28a745;
-    }
-    .keywords-section {
-        margin: 20px 0;
-    }
-    .keyword-pill {
-        display: inline-block;
-        padding: 5px 10px;
-        margin: 5px;
-        background-color: #e9ecef;
-        border-radius: 15px;
-        font-size: 14px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# UI Title
-st.markdown("<h1 class='main-title'>📄 Smart ATS Resume Analyzer</h1>", unsafe_allow_html=True)
-
-# Two-column Layout
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown("### 📝 Paste Job Description")
-    job_description = st.text_area("Enter the Job Description", height=200)
-
-with col2:
-    st.markdown("### 📂 Upload Resume (PDF)")
-    uploaded_file = st.file_uploader("Upload your resume", type="pdf", help="Only PDF files are supported.")
-
-submit = st.button("Analyze Resume")
-
-# Handle Submission
-if submit:
-    if uploaded_file and job_description:
-        with st.spinner("🔍 Analyzing resume..."):
-            resume_text = extract_text_from_pdf(uploaded_file)
-            response = get_gemini_response(resume_text, job_description)
-
-            if "error" in response:
-                st.error(response["error"])
-            else:
-                st.markdown("<div class='result-card'>", unsafe_allow_html=True)
-
-                # JD Match Percentage
-                st.markdown(f"<h2 style='text-align: center;'>✅ JD Match: <span class='match-percentage'>{response['JD Match']}</span></h2>", unsafe_allow_html=True)
-
-                # Missing Keywords Section
-                st.markdown("### 🎯 Missing Keywords")
-                st.markdown("<div class='keywords-section'>", unsafe_allow_html=True)
-                for keyword in response.get("MissingKeywords", []):
-                    st.markdown(f"<span class='keyword-pill'>{keyword}</span>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                # Profile Summary
-                st.markdown("### 📋 Suggested Profile Summary")
-                st.markdown(f"<div style='padding: 20px; background-color: white; border-radius: 5px; border: 1px solid #dee2e6;'>{response['Profile Summary']}</div>", unsafe_allow_html=True)
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                # Recommendations
-                st.markdown("### 💡 Next Steps")
-                st.info("""
-                - Include missing keywords naturally in your resume
-                - Quantify achievements with numbers and impact
-                - Improve your profile summary for better alignment
-                - Use action verbs and industry-specific language
-                """)
+# Function to display the parsed response
+def display_response(response):
+    if isinstance(response, dict):
+        # Proceed with the usual flow if response is valid JSON
+        if 'JD Match' in response:
+            st.subheader(f"JD Match: {response['JD Match']}")
+            st.write(f"Missing Keywords: {', '.join(response['MissingKeywords'])}")
+            st.write(f"Profile Summary: {response['Profile Summary']}")
+        else:
+            st.error(f"API response is not structured as expected: {response}")
     else:
-        st.warning("⚠️ Please upload a resume and enter a job description before proceeding.")
+        # If the response is not in JSON format, show the raw response
+        st.error(f"Failed to parse the response. Raw response: {response}")
+
+# Main function to analyze the resume
+def analyze_resume(input_text, jd):
+    prompt = """
+    You are an AI assistant designed to analyze resumes and match them to job descriptions.
+    Based on the following job description (jd) and resume text (text), provide a JD match score, a list of missing keywords, and a profile summary:
+    
+    Job Description: {jd}
+    Resume: {text}
+    """
+    
+    response = get_gemini_response_with_retry(input_text, prompt)
+    
+    if response:
+        display_response(response)
+
+# Example of using the analyze_resume function
+if __name__ == "__main__":
+    input_text = st.text_area("Enter Resume Text")
+    jd = st.text_area("Enter Job Description")
+    
+    if st.button("Analyze"):
+        analyze_resume(input_text, jd)
