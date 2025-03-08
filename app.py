@@ -1,3 +1,58 @@
+# import streamlit as st
+# import google.generativeai as genai
+# import os
+# import PyPDF2 as pdf
+# from dotenv import load_dotenv
+# import json
+
+# load_dotenv() ## load all our environment variables
+
+# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# def get_gemini_repsonse(input):
+#     model=genai.GenerativeModel('gemini-1.5-flash')
+#     response=model.generate_content(input)
+#     return response.text
+
+# def input_pdf_text(uploaded_file):
+#     reader=pdf.PdfReader(uploaded_file)
+#     text=""
+#     for page in range(len(reader.pages)):
+#         page=reader.pages[page]
+#         text+=str(page.extract_text())
+#     return text
+
+# #Prompt Template
+
+# input_prompt="""
+# Hey Act Like a skilled or very experience ATS(Application Tracking System)
+# with a deep understanding of tech field,software engineering,data science ,data analyst
+# and big data engineer. Your task is to evaluate the resume based on the given job description.
+# You must consider the job market is very competitive and you should provide 
+# best assistance for improving thr resumes. Assign the percentage Matching based 
+# on Jd and
+# the missing keywords with high accuracy
+# resume:{text}
+# description:{jd}
+
+# I want the response in one single string having the structure
+# {{"JD Match":"%","MissingKeywords:[]","Profile Summary":""}}
+# """
+
+# ## streamlit app
+# st.title("Smart ATS")
+# st.text("Improve Your Resume ATS")
+# jd=st.text_area("Paste the Job Description")
+# uploaded_file=st.file_uploader("Upload Your Resume",type="pdf",help="Please uplaod the pdf")
+
+# submit = st.button("Submit")
+
+# if submit:
+#     if uploaded_file is not None:
+#         text=input_pdf_text(uploaded_file)
+#         response=get_gemini_repsonse(input_prompt)
+#         st.subheader(response)
+
 import streamlit as st
 import google.generativeai as genai
 import os
@@ -5,36 +60,32 @@ import PyPDF2 as pdf
 from dotenv import load_dotenv
 import json
 
-# Load environment variables from the .env file
-load_dotenv()  # This loads the Google API key from the .env file
+load_dotenv()  # load all our environment variables
 
-# Configure Google Generative AI API
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Function to get response from the Generative AI model
-def get_gemini_response(input_text, jd):
+def get_gemini_response(input_text, prompt):
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    response = model.generate_content(prompt.format(text=input_text, jd=jd))
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')  # You can try other models available based on your API version
-        response = model.generate_content(input_text=input_text, prompt=jd)
-        return json.loads(response.text)  # Parse the response into a JSON object
-    except Exception as e:
-        return f"Error in generating response: {e}"
+        return json.loads(response.text)
+    except:
+        return response.text
 
-# Function to extract text from a PDF file
 def input_pdf_text(uploaded_file):
     reader = pdf.PdfReader(uploaded_file)
     text = ""
     for page in reader.pages:
-        text += str(page.extract_text())  # Extract text from each page
+        text += str(page.extract_text())
     return text
 
-# Prompt template to analyze resume and job description
+# Prompt Template
 input_prompt = """
-Hey Act Like a skilled or very experienced ATS (Application Tracking System)
-with a deep understanding of tech fields, software engineering, data science, data analysis,
-and big data engineering. Your task is to evaluate the resume based on the given job description.
-You must consider that the job market is very competitive, and you should provide 
-the best assistance for improving the resumes. Assign the percentage Matching based 
+Hey Act Like a skilled or very experience ATS(Application Tracking System)
+with a deep understanding of tech field, software engineering, data science, data analyst
+and big data engineer. Your task is to evaluate the resume based on the given job description.
+You must consider the job market is very competitive and you should provide 
+best assistance for improving the resumes. Assign the percentage Matching based 
 on JD and the missing keywords with high accuracy.
 
 Resume: {text}
@@ -44,10 +95,10 @@ Provide the response in the following JSON format:
 {{"JD Match": "percentage", "MissingKeywords": ["keyword1", "keyword2"], "Profile Summary": "summary"}}
 """
 
-# Streamlit App Configuration
-st.set_page_config(page_title="Smart ATS Resume Analyzer", layout="wide")
+# Page configuration
+st.set_page_config(page_title="Smart ATS", layout="wide")
 
-# Custom CSS for Streamlit UI
+# Custom CSS
 st.markdown("""
     <style>
     .main-title {
@@ -81,10 +132,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Page title
+# App title
 st.markdown("<h1 class='main-title'>Smart ATS Resume Analyzer</h1>", unsafe_allow_html=True)
 
-# Create two columns for input
+# Create two columns
 col1, col2 = st.columns([2, 1])
 
 with col1:
@@ -93,26 +144,22 @@ with col1:
 
 with col2:
     st.markdown("### Upload Resume")
-    uploaded_file = st.file_uploader("Upload Your Resume (PDF)", type="pdf", help="Please upload a PDF")
+    uploaded_file = st.file_uploader("Upload Your Resume (PDF)", type="pdf", help="Please upload the pdf")
 
 submit = st.button("Analyze Resume")
 
-# When the user clicks the submit button
 if submit:
     if uploaded_file is not None and jd:
         with st.spinner("Analyzing your resume..."):
-            # Extract text from the uploaded resume
             text = input_pdf_text(uploaded_file)
-            
-            # Get the response from the Generative AI model
-            response = get_gemini_response(text, jd)
+            response = get_gemini_response(text, input_prompt)
             
             if isinstance(response, dict):
-                # Display results in the result card
+                # Results section
                 st.markdown("<div class='result-card'>", unsafe_allow_html=True)
                 
                 # Match percentage
-                col1, col2, col3 = st.columns([1, 2, 1])
+                col1, col2, col3 = st.columns([1,2,1])
                 with col2:
                     st.markdown(f"<h2 style='text-align: center;'>JD Match: <span class='match-percentage'>{response['JD Match']}</span></h2>", unsafe_allow_html=True)
                 
@@ -132,13 +179,13 @@ if submit:
                 # Recommendations
                 st.markdown("### 💡 Next Steps")
                 st.info("""
-                1. Add the missing keywords to your resume where applicable.
-                2. Quantify your achievements with metrics.
-                3. Tailor your resume summary to better match the job description.
-                4. Use action verbs and industry-specific terminology.
+                1. Add the missing keywords to your resume where applicable
+                2. Quantify your achievements with metrics
+                3. Tailor your resume summary to better match the job description
+                4. Use action verbs and industry-specific terminology
                 """)
                 
             else:
                 st.error("Failed to analyze the resume. Please try again.")
     else:
-        st.warning("Please upload both a resume and a job description before analyzing.")
+        st.warning("Please upload both a resume and job description before analyzing.")
